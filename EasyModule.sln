@@ -1,0 +1,22 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EasyModule", "EasyModule\EasyModule.csproj", "{AA5C9976-E06D-4A6E-9D96-A1F06ECAC23C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{AA5C9976-E06D-4A6E-9D96-A1F06ECAC23C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AA5C9976-E06D-4A6E-9D96-A1F06ECAC23C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AA5C9976-E06D-4A6E-9D96-A1F06ECAC23C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AA5C9976-E06D-4A6E-9D96-A1F06ECAC23C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal
