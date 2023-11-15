@@ -10,7 +10,7 @@ Who to use:
 Tips:
 
     To open the target folder, from Automation Studio right click on it and choose "Open with Explorer".
-![Immagine 2023-11-15 211631](https://github.com/pennisiandrea/EasyFunctionBlock/assets/150801185/c43806fc-83d2-4f83-9219-82f55ff9c7b1)
+![Immagine 2023-11-15 211631](https://github.com/pennisiandrea/EasyModule/assets/150801185/9dadf9f5-f177-43e7-aa9c-6ee5c95d8313)
 
 
 Risks:
