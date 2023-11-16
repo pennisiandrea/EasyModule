@@ -6,6 +6,7 @@ Who to use:
     1) Download the file "EasyModule\newest_sw_release\EasyModule.exe".
     1) Execute it in the target folder.
     2) Follow the instructions in the console.
+    3) The following libraries should be available in the project: standard, asstring
 
 Tips:
 
