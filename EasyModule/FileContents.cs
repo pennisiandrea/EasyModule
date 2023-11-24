@@ -9,13 +9,20 @@ namespace FilesContents
                 
             ResetOutputsAction;
             ResetFeedbacksAction;
-                
-            MachineState.NextState := __MODNAMECAPITAL___INIT;
+            
+            MpRecipeRegParFB(MpLink := ADR(gRecipeXmlMpLink), Enable := TRUE, PVName := ADR('g__MODNAME__.Parameters'));
+            
+            MachineState.NextState := INIT;
             
         END_PROGRAM
 
         PROGRAM _CYCLIC
-            
+            // Recipe
+            MpRecipeRegParFB(ErrorReset := g__MODNAME__.Commands.Reset AND MpRecipeRegParFB.Error);
+
+            // Alarms
+            AlarmsAction;
+
             // Enable module
             IF NOT g__MODNAME__.Commands.Enable THEN
                 ResetOutputsAction;
@@ -27,30 +34,33 @@ namespace FilesContents
             MachineStateManagementAction;
             CASE MachineState.ActualState OF
                 
-                __MODNAMECAPITAL___INIT:
-                    MachineState.NextState := __MODNAMECAPITAL___WAITING;
+                INIT:
+                    MachineState.NextState := WAITING;
                     
-                __MODNAMECAPITAL___WAITING:
+                WAITING:
                     MachineState.TimeoutTimer.PT := T#0S; // Timeout disabled in this state
+                    IF g__MODNAME__.Commands.Start THEN
+                    //    MachineState.NextState := <NEW_STATE>;
+                    END_IF 
                 
-                __MODNAMECAPITAL___ERROR:
+                ERROR:
                     MachineState.TimeoutTimer.PT := T#0S; // Timeout disabled in this state
                     ResetOutputsAction;
                     IF g__MODNAME__.Commands.Reset THEN
-                        MachineState.TimeoutState := __MODNAMECAPITAL___INIT;
+                        MachineState.NextState := MachineState.OldState;
                     END_IF
                 
                 ELSE
-                    // Throw an alarm/error here
-                    MachineState.NextState := __MODNAMECAPITAL___ERROR;			
+                    MachineState.NextState := INIT;			
                 
             END_CASE
             
-            FeedbackUpdateAction;
+            FeedbacksUpdateAction;
             
         END_PROGRAM
 
         PROGRAM _EXIT
+            MpRecipeRegParFB(Enable := FALSE);
             
         END_PROGRAM
         """;
@@ -58,10 +68,11 @@ namespace FilesContents
         public const string ACTIONS_FILE_NAME = "Actions.st";
         public const string ACTIONS_FILE_CONTENT = 
         """
-        ACTION FeedbackUpdateAction: 
+        ACTION FeedbacksUpdateAction: 
 
             g__MODNAME__.Feedbacks.Enabled := TRUE;
-            g__MODNAME__.Feedbacks.State := MachineState.ActualState; 
+            g__MODNAME__.Feedbacks.WaitingStart := MachineState.ActualState = WAITING; 
+            g__MODNAME__.Feedbacks.Error := MachineState.ActualState = ERROR;
 
         END_ACTION
 
@@ -79,15 +90,38 @@ namespace FilesContents
 
         ACTION MachineStateManagementAction: 
 
-            MachineState.NewTriggerState := (MachineState.ActualState <> MachineState.NextState);
+            // Machine state timeout check
             MachineState.TimeoutTimer(IN := MachineState.TimeoutTimer.PT <> T#0S AND NOT MachineState.NewTriggerState);
             IF MachineState.TimeoutTimer.Q THEN
-                // Throw an alarm/error here
-                MachineState.TimeoutState := MachineState.ActualState;
-                MachineState.NextState := __MODNAMECAPITAL___ERROR;		
-            END_IF
+                
+                // Throw here timeout alarms
+                //CASE MachineState.ActualState OF
+                //    <STATE_1_WITH_TIMEOUT>: MpAlarmXSet(gAlarmXCoreMpLink,'<AlarmName>'); // Edge alarm!
+                //    <STATE_2_WITH_TIMEOUT>: MpAlarmXSet(gAlarmXCoreMpLink,'<AlarmName>'); // Edge alarm!
+                //END_CASE
+
+                MachineState.NextState := ERROR;		
+            END_IF            
             
+            // Machine state change state logic
+            MachineState.NewTriggerState := (MachineState.ActualState <> MachineState.NextState);
+            IF MachineState.NewTriggerState THEN
+                MachineState.OldState := MachineState.ActualState;
+            END_IF
             MachineState.ActualState := MachineState.NextState;
+
+        END_ACTION
+        
+        ACTION AlarmsAction:             
+            // Throw here alarms which should be checked continuously
+            // Machine state timeout alarms are managed in MachineStateManagementAction
+
+            // IF <Condition> AND g__MODNAME__.Commands.Enable THEN
+            //      MpAlarmXSet(gAlarmXCoreMpLink,'<AlarmName>');
+            //      MachineState.NextState := ERROR;
+            // ELSE
+            //      MpAlarmXReset(gAlarmXCoreMpLink,'<AlarmName>'); // Reset only for persistent alarms
+            // END_IF
 
         END_ACTION
         """;
@@ -97,12 +131,18 @@ namespace FilesContents
         """
         TYPE
             MachineStateType : 	STRUCT  (*Machine state main type*)
-                ActualState : __MODNAME__StateEnum; (*Actual state*)
-                NextState : __MODNAME__StateEnum; (*Next state*)
+                OldState : MachineStateEnum; (*Actual state*)
+                ActualState : MachineStateEnum; (*Actual state*)
+                NextState : MachineStateEnum; (*Next state*)
                 NewTriggerState : BOOL; (*Trigger state change*)
                 TimeoutTimer : TON; (*State timeout*)
-                TimeoutState : __MODNAME__StateEnum;
             END_STRUCT;
+            MachineStateEnum : 
+                ( (*Machine State enumeration*)
+                INIT, (*INIT state*)
+                WAITING, (*WAITING state*)
+                ERROR (*ERROR state*)
+                );
         END_TYPE
         """;
 
@@ -111,6 +151,7 @@ namespace FilesContents
         """
         VAR
             MachineState : MachineStateType;
+            MpRecipeRegParFB : MpRecipeRegPar; (*Recipe register functionblock*)
         END_VAR
         """;
 
@@ -154,11 +195,13 @@ namespace FilesContents
             END_STRUCT;
             __MODNAME__CommadsType : 	STRUCT  (*__MODNAME__ Commands type*)
                 Enable : BOOL;
+                Start : BOOL;
                 Reset : BOOL;
             END_STRUCT;
             __MODNAME__FeedbacksType : 	STRUCT  (*__MODNAME__ Feedbacks type*)
                 Enabled : BOOL;
-                State : __MODNAME__StateEnum; (*__MODNAME__ actual state*)
+                WaitingStart : BOOL;
+                Error   : BOOL;
             END_STRUCT;
             __MODNAME__ParametersType : 	STRUCT  (*__MODNAME__ Parameters type*)
                 Var : BOOL;
@@ -173,12 +216,6 @@ namespace FilesContents
             __MODNAME__InterfaceInputsType : 	STRUCT  (*__MODNAME__ Interface Input type*)
                 Var : BOOL;
             END_STRUCT;
-            __MODNAME__StateEnum : 
-                ( (*__MODNAME__ Machine State enumeration*)
-                __MODNAMECAPITAL___INIT, (*__MODNAME__ in INIT state*)
-                __MODNAMECAPITAL___WAITING, (*__MODNAME__ in WAITING state*)
-                __MODNAMECAPITAL___ERROR (*__MODNAME__ in ERROR state*)
-                );
         END_TYPE
         """;
         
