@@ -10,7 +10,7 @@ namespace FilesContents
             ResetOutputsAction;
             ResetFeedbacksAction;
             
-            MpRecipeRegParFB(MpLink := ADR(gRecipeXmlMpLink), Enable := TRUE, PVName := ADR('g__MODNAME__.Parameters'));
+            //MpRecipeRegParFB(MpLink := ADR(gRecipeXmlMpLink), Enable := TRUE, PVName := ADR('g__MODNAME__.Parameters'));
             
             MachineState.NextState := INIT;
             
@@ -18,7 +18,7 @@ namespace FilesContents
 
         PROGRAM _CYCLIC
             // Recipe
-            MpRecipeRegParFB(ErrorReset := g__MODNAME__.Commands.Reset AND MpRecipeRegParFB.Error);
+            //MpRecipeRegParFB(ErrorReset := g__MODNAME__.Commands.Reset AND MpRecipeRegParFB.Error);
 
             // Alarms
             AlarmsAction;
@@ -35,6 +35,7 @@ namespace FilesContents
             CASE MachineState.ActualState OF
                 
                 INIT:
+                    MachineState.TimeoutTimer.PT := T#0S; // Timeout disabled in this state
                     MachineState.NextState := WAITING;
                     
                 WAITING:
@@ -45,11 +46,19 @@ namespace FilesContents
                 
                 ERROR:
                     MachineState.TimeoutTimer.PT := T#0S; // Timeout disabled in this state
-                    ResetOutputsAction;
-                    IF g__MODNAME__.Commands.Reset THEN
-                        MachineState.NextState := MachineState.OldState;
+                    IF MachineState.NewTriggerState THEN
+                        ResetOutputsAction;
+                    ELSE
+                        IF g__MODNAME__.Commands.Reset THEN
+                            g__MODNAME__.Commands.Reset := FALSE;
+                            MachineState.NextState := MachineState.OldState;
+                        END_IF
                     END_IF
-                
+                    
+                WAITING_STEP_TRIGGER:
+                    MachineState.TimeoutTimer.PT := T#0S; // Timeout disabled in this state
+                    // Just wait the step trigger. The logic is managed in MachineStateManagementAction action.
+
                 ELSE
                     MachineState.NextState := INIT;			
                 
@@ -60,7 +69,7 @@ namespace FilesContents
         END_PROGRAM
 
         PROGRAM _EXIT
-            MpRecipeRegParFB(Enable := FALSE);
+            //MpRecipeRegParFB(Enable := FALSE);
             
         END_PROGRAM
         """;
@@ -71,7 +80,7 @@ namespace FilesContents
         ACTION FeedbacksUpdateAction: 
 
             g__MODNAME__.Feedbacks.Enabled := TRUE;
-            g__MODNAME__.Feedbacks.WaitingStart := MachineState.ActualState = WAITING; 
+            g__MODNAME__.Feedbacks.Waiting := MachineState.ActualState = WAITING; 
             g__MODNAME__.Feedbacks.Error := MachineState.ActualState = ERROR;
 
         END_ACTION
@@ -105,10 +114,17 @@ namespace FilesContents
             
             // Machine state change state logic
             MachineState.NewTriggerState := (MachineState.ActualState <> MachineState.NextState);
-            IF MachineState.NewTriggerState THEN
+            IF MachineState.NewTriggerState AND MachineState.ActualState <> WAITING_STEP_TRIGGER THEN
                 MachineState.OldState := MachineState.ActualState;
+                
+                IF MachineState.StepByStepEnable THEN
+                    MachineState.ActualState := WAITING_STEP_TRIGGER;
+                END_IF
             END_IF
-            MachineState.ActualState := MachineState.NextState;
+            IF NOT MachineState.StepByStepEnable OR MachineState.StepByStepTrigger THEN
+                MachineState.ActualState := MachineState.NextState;
+                MachineState.StepByStepTrigger := FALSE;	
+            END_IF
 
         END_ACTION
         
@@ -136,12 +152,15 @@ namespace FilesContents
                 NextState : MachineStateEnum; (*Next state*)
                 NewTriggerState : BOOL; (*Trigger state change*)
                 TimeoutTimer : TON; (*State timeout*)
+                StepByStepEnable : BOOL; (*Enable of Step by Step mode*)
+                StepByStepTrigger : BOOL; (*Trigger to change step when Step by Step mode is active*)
             END_STRUCT;
             MachineStateEnum : 
                 ( (*Machine State enumeration*)
                 INIT, (*INIT state*)
                 WAITING, (*WAITING state*)
-                ERROR (*ERROR state*)
+                ERROR, (*ERROR state*)
+                WAITING_STEP_TRIGGER (*WAITING trigger in StepByStep mode*)
                 );
         END_TYPE
         """;
@@ -200,7 +219,7 @@ namespace FilesContents
             END_STRUCT;
             __MODNAME__FeedbacksType : 	STRUCT  (*__MODNAME__ Feedbacks type*)
                 Enabled : BOOL;
-                WaitingStart : BOOL;
+                Waiting : BOOL;
                 Error   : BOOL;
             END_STRUCT;
             __MODNAME__ParametersType : 	STRUCT  (*__MODNAME__ Parameters type*)
